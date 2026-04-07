@@ -1,0 +1,5 @@
+site_name: Assistente de Lances
+theme:
+  name: mkdocs
+nav:
+  - Inicio: index.md
