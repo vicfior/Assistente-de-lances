@@ -8,13 +8,17 @@ from typing import Optional
 
 try:
     from bs4 import BeautifulSoup
-except ImportError:  # pragma: no cover - depende do ambiente
+except ImportError:
     BeautifulSoup = None
 
 try:
-    from playwright.sync_api import Browser, BrowserContext, Page, TimeoutError as PlaywrightTimeoutError
+    from playwright.sync_api import (
+        Browser,
+        BrowserContext,
+        Page,
+        TimeoutError as PlaywrightTimeoutError )
     from playwright.sync_api import sync_playwright
-except ImportError:  # pragma: no cover - depende do ambiente
+except ImportError:
     Browser = BrowserContext = Page = None
     PlaywrightTimeoutError = RuntimeError
     sync_playwright = None
@@ -62,21 +66,49 @@ class BrowserAutomation:
     )
 
     def __init__(self, timeout_seconds: float = 15.0, headless: bool = True) -> None:
+        """
+        Inicializa o BrowserAutomation com o tempo de timeout e a opcao de headless.
+
+        :param timeout_seconds: O tempo de timeout em segundos para a abertura das paginas.
+        :param headless: Se True, o browser sera executado em modo headless.
+        """
         self.timeout_seconds = timeout_seconds
         self.headless = headless
         self._playwright = None
         self._browser: Optional[Browser] = None
         self._context: Optional[BrowserContext] = None
         self._page: Optional[Page] = None
+        self._current_url: str = ""  # CORREÇÃO: rastreia a URL atual para evitar recargas desnecessárias
 
     def __enter__(self) -> "BrowserAutomation":
+        """
+        Inicializa o BrowserAutomation com o tempo de timeout e a opcao de headless.
+        
+        Retorna o proprio objeto para que possa ser usado como um contexto manager.
+        """
         self.start()
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
+        """
+        Fecha o BrowserAutomation.
+
+        Fecha automaticamente o BrowserAutomation quando ele e usado como um contexto manager.
+        """
         self.close()
 
     def start(self) -> None:
+        """
+        Inicializa o BrowserAutomation com o tempo de timeout e a opcao de headless.
+
+        Abre o playwright com o tempo de timeout e a opcao de headless.
+        Se o playwright nao estiver instalado, lanca um erro de RuntimeError.
+        Se a versao do Python tiver suporte a politica de loop do Windows,
+        configura a politica de loop para usar o WindowsProactorEventLoopPolicy.
+        Cria um novo contexto do navegador com o user agent padrao, locale "pt-BR" e viewport
+        de 1440x900.
+        Cria uma nova pagina com o contexto criado e configura o tempo de timeout para a pagina.
+        """
         if sync_playwright is None:
             raise RuntimeError("Playwright nao esta instalado. Execute: pip install -r requirements.txt")
 
@@ -101,15 +133,31 @@ class BrowserAutomation:
         self._page.set_default_timeout(self.timeout_seconds * 1000)
 
     def _open_page(self, url: str) -> None:
+        """Abre a página apenas se a URL for diferente da atual."""
         page = self.page
+
+        if self._current_url == url:
+            return
+
         page.goto(url, wait_until="domcontentloaded")
         try:
             page.wait_for_load_state("networkidle", timeout=min(int(self.timeout_seconds * 1000), 10000))
         except Exception:
             pass
-        page.wait_for_timeout(1500)
+        page.wait_for_timeout(3500)
+        self._current_url = url
+
+    def _force_reload(self, url: str) -> None:
+        """Força recarregamento da página — use apenas quando necessário."""
+        self._current_url = ""
+        self._open_page(url)
 
     def close(self) -> None:
+        """
+        Fecha automaticamente o BrowserAutomation.
+
+        Fecha automaticamente o BrowserAutomation quando ele e usado como um context manager.
+        """
         if self._context:
             self._context.close()
         if self._browser:
@@ -121,9 +169,16 @@ class BrowserAutomation:
         self._browser = None
         self._playwright = None
         self._page = None
+        self._current_url = ""
 
     @property
     def page(self) -> Page:
+        """
+        Retorna a instancia da pagina atual.
+
+        Raises:
+            RuntimeError: Se o BrowserAutomation nao foi iniciado.
+        """
         if not self._page:
             raise RuntimeError("BrowserAutomation nao foi iniciado.")
         return self._page
@@ -134,6 +189,12 @@ class BrowserAutomation:
         return normalized.lower().strip()
 
     def _clean_content_text(self, raw_text: str) -> str:
+        """
+        Limpa o texto recebido, removendo espacos em excesso e quebras de linha.
+
+        :param raw_texts: O texto bruto a ser limpo.
+        :return: O texto limpo, pronto para ser usado em uma mensagem.
+        """
         lines = [re.sub(r"\s+", " ", line).strip() for line in (raw_text or "").splitlines()]
         lines = [line for line in lines if line]
         return "\n".join(lines)
@@ -142,7 +203,7 @@ class BrowserAutomation:
         return bool(re.search(r"(?:R\$\s*)?\d{1,3}(?:\.\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?", raw_text or ""))
 
     def _extract_numeric_matches(self, raw_text: str) -> list[str]:
-        return re.findall(r"(?:R\$\s*)?\d{1,3}(?:\.\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?", raw_text or "")
+        return re.findall(r"(?:R\$\s*)?\d{1,3}(?:\.\d{3})*(?:,\d+)?\s*%?|\d+(?:[.,]\d+)?\s*%?", raw_text or "")
 
     def _looks_like_price(self, value: str) -> bool:
         candidate = (value or "").strip().replace("R$", "").replace(" ", "")
@@ -154,7 +215,17 @@ class BrowserAutomation:
 
     def _extract_price_candidates(self, raw_text: str) -> list[str]:
         matches = self._extract_numeric_matches(raw_text)
-        return [match.strip() for match in matches if self._looks_like_price(match)]
+        valid_candidates = []
+        for match in matches:
+            cleaned_match = match.strip()
+            
+            if "%" in cleaned_match:
+                continue
+                
+            if self._looks_like_price(cleaned_match):
+                valid_candidates.append(cleaned_match)
+                
+        return valid_candidates
 
     def _looks_like_blocked_page(self, raw_text: str) -> bool:
         normalized = self._normalize_text(raw_text)
@@ -202,6 +273,10 @@ class BrowserAutomation:
         cleaned = re.sub(r"\s+", " ", (line or "").strip(" -|:"))
         cleaned = re.sub(r"(?:R\$\s*)?\d{1,3}(?:\.\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?", "", cleaned)
         cleaned = re.sub(r"\s+", " ", cleaned).strip(" -|:")
+
+        if not re.search(r'[a-zA-Z]', cleaned):
+            return ""
+
         return cleaned
 
     def _is_meaningful_label(self, label: str) -> bool:
@@ -212,6 +287,10 @@ class BrowserAutomation:
             return False
         if normalized.startswith("reference #"):
             return False
+        
+        if not re.search(r'[a-z]', normalized):
+            return False
+        
         return True
 
     def _build_smart_candidates(self, keyword: str) -> list[str]:
@@ -245,8 +324,10 @@ class BrowserAutomation:
         context_locator = locator.locator(context_xpath).first
         try:
             raw_text = context_locator.inner_text().strip()
-            if not self._contains_numeric_signal(raw_text):
+            
+            if not self._extract_price_candidates(raw_text):
                 return None
+                
             if self._looks_like_blocked_page(raw_text):
                 return None
 
@@ -294,13 +375,22 @@ class BrowserAutomation:
         return None
 
     def _find_text_match_in_page_content(self, keyword: str) -> Optional[ElementSnapshot]:
-        if BeautifulSoup is None:
-            return None
+        """
+        CORREÇÃO: usa document.body.innerText (DOM vivo) em vez de page.content() (HTML estático).
+        Isso garante que valores atualizados por JavaScript sejam lidos corretamente.
+        """
+        try:
+            live_text = self.page.locator("body").inner_text()
+        except Exception:
+            if BeautifulSoup is None:
+                return None
+            content = self.page.content()
+            soup = BeautifulSoup(content, "html.parser")
+            live_text = soup.get_text("\n", strip=True)
 
-        content = self.page.content()
-        soup = BeautifulSoup(content, "html.parser")
-        lines = [line.strip() for line in soup.get_text("\n", strip=True).splitlines() if line.strip()]
+        lines = [line.strip() for line in live_text.splitlines() if line.strip()]
         full_text = "\n".join(lines)
+
         if self._looks_like_blocked_page(full_text):
             raise ValueError("A pagina carregada parece ser uma tela de bloqueio ou erro do site, e nao a cotacao real.")
 
@@ -323,14 +413,33 @@ class BrowserAutomation:
 
         return None
 
-    def discover_candidate_fields(self, url: str, limit: int = 12) -> list[CandidateField]:
+    def discover_candidate_fields(self, url: str, limit: int = 100) -> list[CandidateField]:
+        """
+        Descobre os campos dinamicos em uma pagina de leilao.
+
+        Recebe uma URL e um limite de candidatos a serem descobertos.
+        Retorna uma lista de objetos CandidateField que representam os campos dinamicos encontrados na pagina.
+
+        :param url: URL da pagina que contem o campo dinamico.
+        :param limit: O limite de candidatos a serem descobertos.
+        :return: Uma lista de objetos CandidateField que representam os campos dinamicos encontrados na pagina.
+        :raises RuntimeError: Se o BeautifulSoup nao estiver instalado.
+        :raises ValueError: Se a pagina analisada parece ser uma tela de bloqueio ou erro do site.
+        """
         if BeautifulSoup is None:
             raise RuntimeError("BeautifulSoup nao esta instalado. Execute: pip install -r requirements.txt")
 
         self._open_page(url)
-        content = self.page.content()
-        soup = BeautifulSoup(content, "html.parser")
-        lines = [line.strip() for line in soup.get_text("\n", strip=True).splitlines() if line.strip()]
+
+        # CORREÇÃO: usa DOM vivo para descoberta de candidatos também
+        try:
+            live_text = self.page.locator("body").inner_text()
+            lines = [line.strip() for line in live_text.splitlines() if line.strip()]
+        except Exception:
+            content = self.page.content()
+            soup = BeautifulSoup(content, "html.parser")
+            lines = [line.strip() for line in soup.get_text("\n", strip=True).splitlines() if line.strip()]
+
         full_text = "\n".join(lines)
 
         if self._looks_like_blocked_page(full_text):
@@ -379,8 +488,15 @@ class BrowserAutomation:
 
             context_paths = [
                 "xpath=ancestor::*[contains(@class,'chart-info')][1]",
-                "xpath=ancestor::*[contains(@class,'card') or contains(@class,'row') or contains(@class,'table')][1]",
-                "xpath=ancestor-or-self::*[self::tr or self::li or self::article or self::section or self::div][1]",
+                "xpath=ancestor::*[contains(@class,'card') or contains(@class,'row') or contains(@class,'table') or contains(@class,'item')][1]",
+                "xpath=ancestor::article[1]",
+                "xpath=ancestor::a[1]",
+                "xpath=ancestor::li[1]",
+                "xpath=ancestor::div[1]",
+                "xpath=ancestor::div[2]",
+                "xpath=ancestor::div[3]",
+                "xpath=ancestor::div[4]",
+                "xpath=ancestor::div[5]",
             ]
 
             for context_xpath in context_paths:
@@ -390,7 +506,7 @@ class BrowserAutomation:
 
             try:
                 raw_text = locator.inner_text().strip()
-                if not self._contains_numeric_signal(raw_text):
+                if not self._extract_price_candidates(raw_text):
                     continue
                 if self._looks_like_blocked_page(raw_text):
                     continue
@@ -421,7 +537,11 @@ class BrowserAutomation:
         )
 
     def get_field_value(self, url: str, selector: str, selector_type: str) -> ElementSnapshot:
-        self._open_page(url)
+        """
+        CORREÇÃO: só abre a página se a URL for diferente da atual.
+        Nas checagens subsequentes do monitor, a página já está aberta e apenas relê o DOM.
+        """
+        self._open_page(url)  
         page = self.page
 
         if selector_type == "smart":
@@ -458,24 +578,40 @@ class BrowserAutomation:
             )
 
         if selector_type == "regex":
-            if BeautifulSoup is None:
-                raise RuntimeError("BeautifulSoup nao esta instalado. Execute: pip install -r requirements.txt")
-            content = page.content()
-            soup = BeautifulSoup(content, "html.parser")
-            text = soup.get_text("\n", strip=True)
-            match = re.search(selector, text)
+            try:
+                live_text = page.evaluate("() => document.body.innerText")
+            except Exception:
+                if BeautifulSoup is None:
+                    raise RuntimeError("BeautifulSoup nao esta instalado. Execute: pip install -r requirements.txt")
+                content = page.content()
+                soup = BeautifulSoup(content, "html.parser")
+                live_text = soup.get_text("\n", strip=True)
+
+            match = re.search(selector, live_text)
             if not match:
                 raise ValueError(f"Regex nao encontrou resultado: {selector}")
             return ElementSnapshot(
                 value=match.group(0).strip(),
-                locator_description=f"regex={selector} | page_text_length={len(text)}",
+                locator_description=f"regex={selector} | page_text_length={len(live_text)}",
                 content_preview=match.group(0).strip()[:500],
             )
 
         raise ValueError(f"Tipo de seletor nao suportado: {selector_type}")
 
     def post_update(self, url: str, input_selector: str, button_selector: str, message: str) -> None:
-        self._open_page(url)
+        """
+        Envia uma mensagem por meio de uma pagina web.
+
+        Parameters:
+        url (str): URL da pagina que sera enviada a notificacao.
+        input_selector (str): Seletor do campo de entrada na pagina publica.
+        button_selector (str): Seletor do botao de envio na pagina publica.
+        message (str): A mensagem a ser enviada.
+
+        Returns:
+        None
+        """
+        self._force_reload(url)  # página de destino sempre deve ser aberta do zero
         page = self.page
         page.fill(input_selector, message)
         page.click(button_selector)
@@ -492,7 +628,27 @@ class BrowserAutomation:
         subject: str,
         body: str,
     ) -> None:
-        self._open_page(gmail_url)
+        """
+        Envia uma mensagem por meio do Gmail Web.
+
+        Parameters:
+        gmail_url (str): URL do Gmail Web.
+        compose_selector (str): Seletor do botao de "Compor" no Gmail Web.
+        to_selector (str): Seletor do campo de destinatario no Gmail Web.
+        subject_selector (str): Seletor do campo de assunto no Gmail Web.
+        body_selector (str): Seletor do campo de mensagem no Gmail Web.
+        send_selector (str): Seletor do botao de envio no Gmail Web.
+        recipient (str): O endereco de email do destinatario.
+        subject (str): O assunto da mensagem.
+        body (str): O conteudo da mensagem.
+
+        Returns:
+        None
+
+        Raises:
+        RuntimeError: Se houver falha ao interagir com o Gmail Web.
+        """
+        self._force_reload(gmail_url)  # Gmail sempre abre do zero
         page = self.page
         try:
             page.click(compose_selector)
@@ -504,3 +660,4 @@ class BrowserAutomation:
             raise RuntimeError(
                 "Falha ao interagir com o Gmail Web. Prefira SMTP com App Password para uso estavel."
             ) from exc
+        
