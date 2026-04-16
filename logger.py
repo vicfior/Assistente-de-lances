@@ -8,6 +8,25 @@ LOG_FILE = LOG_DIR / "auction_assistant.log"
 
 
 def setup_logger(name: str = "auction_assistant") -> logging.Logger:
+    """
+    Configura o logger para o assistente de leil oes.
+
+    Parameters
+    ----------
+    name : str, optional
+        O nome do logger a ser criado. O padr o   "auction_assistant".
+
+    Returns
+    -------
+    logging.Logger
+        O logger configurado.
+
+    Notes
+    -----
+    O logger configurado ir  escrito em um arquivo de log rotativo,
+    que ser  substitu do quando atingir 1MB. At 3 arquivos de log
+    antigos ser o mantidos. O logger tamb m ir  escrito na sa da padr o.
+    """
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     logger = logging.getLogger(name)
