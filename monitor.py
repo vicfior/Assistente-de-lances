@@ -41,6 +41,17 @@ class AuctionMonitor:
         self.sleep_func = sleep_func
 
     def fetch_current_value(self, url: str, selector: str, selector_type: str) -> ElementSnapshot:
+        """
+        Captura o valor atual do campo dinamico na pagina.
+        
+        Parameters:
+        url (str): URL da pagina que contem o campo dinamico.
+        selector (str): Seletor do campo dinamico, que pode ser do tipo "text", "css", "xpath" ou "regex".
+        selector_type (str): Tipo do seletor.
+        
+        Returns:
+        ElementSnapshot: Um objeto que representa o valor atual do campo dinamico.
+        """
         snapshot = self.browser.get_field_value(url, selector, selector_type)
         self.logger.info("Campo localizado com sucesso: %s", snapshot.locator_description)
         return snapshot
@@ -50,7 +61,18 @@ class AuctionMonitor:
         previous_value: str,
         current_value: str,
         locator_description: str,
-    ) -> Optional[ChangeEvent]:
+    ) -> Optional[ChangeEvent]:        
+        """
+        Detecta se houve uma mudanca entre o valor anterior e o atual do campo dinamico.
+        
+        Parameters:
+        previous_value (str): O valor anterior do campo dinamico.
+        current_value (str): O valor atual do campo dinamico.
+        locator_description (str): A descricao do seletor do campo dinamico.
+        
+        Returns:
+        Optional[ChangeEvent]: Um objeto que representa a mudanca detectada, ou None se nao houver mudanca.
+        """
         if previous_value == current_value:
             return None
 
@@ -73,6 +95,23 @@ class AuctionMonitor:
         on_initialized: Optional[Callable[[ElementSnapshot, MonitorStats], None]] = None,
         stop_event: Optional[Event] = None,
     ) -> MonitorStats:
+        """
+        Monitora uma pagina web e detecta alteracoes em um campo dinamico.
+
+        Parameters:
+        url (str): URL da pagina que contem o campo dinamico.
+        selector (str): Seletor do campo dinamico, que pode ser do tipo "text", "css", "xpath" ou "regex".
+        selector_type (str): Tipo do seletor.
+        interval_seconds (float): Tempo de intervalo entre as consultas ao campo dinamico.
+        on_change (Callable[[ChangeEvent], None]): Funcao de callback que sera chamada quando uma alteracao e detectada.
+        max_cycles (Optional[int]): Numero maximo de ciclos antes de interromper o monitoramento.
+        on_stats (Optional[Callable[[MonitorStats], None]]): Funcao de callback que sera chamada a cada ciclo de monitoramento.
+        on_initialized (Optional[Callable[[ElementSnapshot, MonitorStats], None]]): Funcao de callback que sera chamada quando o monitoramento e inicializado.
+        stop_event (Optional[Event]): Evento que sera usado para interromper o monitoramento manualmente.
+
+        Returns:
+        MonitorStats: Um objeto que representa as informacoes de estatistica do monitoramento.
+        """
         cycle = 0
         previous_snapshot = self.fetch_current_value(url, selector, selector_type)
         self.logger.info("Valor inicial capturado: %s", previous_snapshot.value)
