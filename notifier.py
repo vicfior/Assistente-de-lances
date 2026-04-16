@@ -16,6 +16,15 @@ class EmailNotifier:
         sender_password: str,
         logger,
     ) -> None:
+        """
+        Initialize the EmailNotifier with the SMTP server and port, sender email and password, and logger.
+
+        :param smtp_server: The SMTP server to use for sending emails.
+        :param smtp_port: The SMTP server port to use for sending emails.
+        :param sender_email: The email address of the sender.
+        :param sender_password: The password of the sender email.
+        :param logger: The logger to use for logging events.
+        """
         self.smtp_server = smtp_server
         self.smtp_port = smtp_port
         self.sender_email = sender_email
@@ -23,6 +32,14 @@ class EmailNotifier:
         self.logger = logger
 
     def send_email(self, recipient: str, subject: str, body: str) -> None:
+        """
+        Envia uma notificacao por email para o destinatario especificado.
+
+        :param recipient: O endereco de email do destinatario.
+        :param subject: O assunto da mensagem.
+        :param body: O conteudo da mensagem.
+        :raises RuntimeError: Se houver falha ao autenticar no email remetente.
+        """
         message = EmailMessage()
         message["From"] = self.sender_email
         message["To"] = recipient
@@ -48,6 +65,13 @@ class NotificationService:
         self.email_notifier = email_notifier
 
     def build_message(self, old_value: str, new_value: str) -> str:
+        """
+        Construi uma mensagem de notificacao com o valor anterior e novo.
+
+        :param old_value: O valor anterior do campo monitorado.
+        :param new_value: O valor novo do campo monitorado.
+        :return: A mensagem de notificacao construida.
+        """
         return f"Valor alterado:\nAnterior: {old_value}\nNovo: {new_value}"
 
     def build_confirmation_message(
@@ -57,6 +81,15 @@ class NotificationService:
         source_url: str,
         field_content: str,
     ) -> str:
+        """
+        Constrói uma mensagem de confirmação de início de monitoramento com o valor atual, conteúdo do elemento e URL da página monitorada.
+
+        :param monitored_label: O nome do campo monitorado.
+        :param current_value: O valor atual do campo monitorado.
+        :param source_url: A URL da pagina monitorada.
+        :param field_content: O conteudo completo encontrado no elemento monitorado.
+        :return: A mensagem de confirmacao construida.
+        """
         return (
             "Monitoramento iniciado com sucesso.\n"
             f"Campo monitorado: {monitored_label}\n"
@@ -75,12 +108,32 @@ class NotificationService:
         old_value: str,
         new_value: str,
     ) -> str:
+        """
+        Envia uma notificacao por email para o destinatario especificado.
+
+        :param browser: O objeto BrowserAutomation que sera usado para enviar a notificacao.
+        :param target_url: A URL da pagina publica que sera enviada a notificacao.
+        :param input_selector: O seletor do campo de entrada na pagina publica.
+        :param button_selector: O seletor do botao de envio na pagina publica.
+        :param old_value: O valor anterior do campo monitorado.
+        :param new_value: O valor novo do campo monitorado.
+        :return: A mensagem de notificacao construida.
+        :raises RuntimeError: Se houver falha ao autenticar no email remetente.
+        """
         message = self.build_message(old_value, new_value)
         browser.post_update(target_url, input_selector, button_selector, message)
         self.logger.info("Mensagem enviada para pagina publica %s", target_url)
         return message
 
     def notify_email(self, recipient: str, old_value: str, new_value: str) -> None:
+        """
+        Envia uma notificacao por email para o destinatario especificado.
+
+        :param recipient: O endereco de email do destinatario.
+        :param old_value: O valor anterior do campo monitorado.
+        :param new_value: O valor novo do campo monitorado.
+        :raises RuntimeError: Se houver falha ao autenticar no email remetente.
+        """
         if not self.email_notifier:
             self.logger.warning("Servico de email nao configurado; notificacao ignorada.")
             return
@@ -100,6 +153,16 @@ class NotificationService:
         source_url: str,
         field_content: str,
     ) -> None:
+        """
+        Envia uma notificacao por email para o destinatario especificado com o valor atual, conteudo do elemento e URL da pagina monitorada.
+
+        :param recipient: O endereco de email do destinatario.
+        :param monitored_label: O nome do campo monitorado.
+        :param current_value: O valor atual do campo monitorado.
+        :param source_url: A URL da pagina monitorada.
+        :param field_content: O conteudo completo encontrado no elemento monitorado.
+        :raises RuntimeError: Se houver falha ao autenticar no email remetente.
+        """
         if not self.email_notifier:
             self.logger.warning("Servico de email nao configurado; confirmacao ignorada.")
             return
@@ -126,6 +189,18 @@ class NotificationService:
         input_selector: str = "",
         button_selector: str = "",
     ) -> None:
+        """
+        Envia notificacoes por email e pela pagina publica para o destinatario especificado.
+
+        :param browser: O objeto BrowserAutomation que sera usado para enviar a notificacao por pagina publica.
+        :param recipient: O endereco de email do destinatario.
+        :param old_value: O valor anterior do campo monitorado.
+        :param new_value: O valor novo do campo monitorado.
+        :param target_url: A URL da pagina publica que sera enviada a notificacao.
+        :param input_selector: O seletor do campo de entrada na pagina publica.
+        :param button_selector: O seletor do botao de envio na pagina publica.
+        :raises RuntimeError: Se houver falha ao autenticar no email remetente.
+        """
         if target_url and input_selector and button_selector:
             self.notify_external_page(
                 browser=browser,
