@@ -1,4 +1,5 @@
 from __future__ import annotations
+import re
 
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -126,10 +127,9 @@ def validate_url_email(email: str) -> str:
     :return: O endereco de email validado.
     """
     candidate = (email or "").strip()
+    regex =  r'^[\w\.-]+@[\w\.-]+\.\w+$'
 
-    if not candidate:
-        raise ValidationError("O campo email nao pode ser vazio.")
-    elif "@" not in candidate or "." not in candidate.split("@")[-1]:
+    if not re.match(regex, candidate):
         raise ValidationError("Email invalido.")
     return candidate
 
