@@ -117,6 +117,24 @@ def validate_port(port: int) -> int:
         raise ValidationError("Porta SMTP invalida.")
     return port
 
+def validate_url_email(email: str) -> str:
+    """
+    Valida um endereco de email.
+
+    :param email: O endereco de email a ser validado.
+    :raises ValidationError: Se o email for invalido.
+    :return: O endereco de email validado.
+    """
+    candidate = (email or "").strip()
+
+    if not candidate:
+        raise ValidationError("O campo email nao pode ser vazio.")
+    elif "@" not in candidate or "." not in candidate.split("@")[-1]:
+        raise ValidationError("Email invalido.")
+    return candidate
+
+
+
 
 def validate_user_input(data: dict) -> UserInput:
     """
@@ -167,15 +185,4 @@ def validate_user_input(data: dict) -> UserInput:
     )
 
 
-def validate_url_email(email: str) -> str:
-    """
-    Valida um endereco de email.
 
-    :param email: O endereco de email a ser validado.
-    :raises ValidationError: Se o email for invalido.
-    :return: O endereco de email validado.
-    """
-    candidate = (email or "").strip()
-    if "@" not in candidate or "." not in candidate.split("@")[-1]:
-        raise ValidationError("Email invalido.")
-    return candidate
