@@ -242,6 +242,47 @@ def _start_background_monitoring(form_data: dict, state: dict) -> None:
     state["thread"] = thread
     thread.start()
 
+def test_email_connection(form_data: dict) -> None:
+    """
+    Testa a conexão SMTP com o email
+
+    Esta função testa se a conexão SMTP com o email esta funcionando para ter certeza que os dados serão
+    enviados
+
+    :param form_data: Dicionario com configuracoes do monitoramento.
+    :raises ValidationError: Se as entradas do usuario forem invalidas.
+    """
+    
+    local_secrets = load_local_secrets()
+    
+    
+    smtp_password = (
+        local_secrets.get("email_password")
+        or os.getenv("AUCTION_ASSISTANT_SMTP_PASSWORD")
+    )
+    
+    if not smtp_password:
+        raise ValueError("Senha não encontrada. Verifique o arquivo local_secrets.json ou defina a variável de ambiente.")
+    
+    if not form_data["email_recipient"]:
+        raise ValueError("e-mail destinatario não encontrado")
+
+    
+    email_notifier = EmailNotifier(
+        smtp_server=form_data["smtp_server"],
+        smtp_port=int(form_data["smtp_port"]),
+        sender_email=form_data["email_sender"],
+        sender_password=smtp_password,
+        logger=LOGGER,
+    )
+    
+    
+    email_notifier.send_email(
+        recipient= form_data["email_recipient"],
+        subject="Teste do Assistente de Leilões",
+        body="O e-mail remetente esta configurado corretamente."
+    )
+
 
 def run_streamlit() -> None:
     """
@@ -404,7 +445,23 @@ def run_streamlit() -> None:
         form_data["target_input_selector"] = target_input_selector
         form_data["target_button_selector"] = target_button_selector
 
-        submitted = st.form_submit_button("Iniciar monitoramento")
+        #submitted = st.form_submit_button("Iniciar monitoramento")
+
+        col_test1, col_test2 = st.columns(2)
+        with col_test1:
+            submitted = st.form_submit_button("Iniciar monitoramento")
+        with col_test2:
+            test_email = st.form_submit_button("Testar Conexão de E-mail")
+
+    
+    if test_email:
+        with st.spinner("Testando conexão SMTP e enviando e-mail."):
+            try:
+                
+                test_email_connection(form_data)
+                st.success("E-mail de teste enviado com sucesso.")
+            except Exception as exc:
+                st.error(f"Falha no envio: {exc}")
 
     if submitted:
         if monitor_state["running"]:
