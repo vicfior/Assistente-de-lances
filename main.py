@@ -295,235 +295,361 @@ def run_streamlit() -> None:
     :raises Exception: Se ocorrer um erro nao tratado durante a execucao.
     """
     import streamlit as st
-
     st.set_page_config(
-        page_title="Auction Assistant", page_icon="PS", layout="centered"
-    )
-    st.title("Assistente de Lances para Sites de Leilao")
-    st.write(
+    page_title="Assistente de Lances",
+    page_icon="🍓",
+    layout="centered",
+    initial_sidebar_state="auto"
+)
+    tab1, tab2, tab3 = st.tabs(["Assistente de Lances", "Análise do Algoritmo", "Sobre nós"])
+    with tab1:
+        st.title("Assistente de Lances para Sites de Leilão")
+        st.markdown("Monitoramento Inteligente de Preços de Leilões")
+        st.write(
         "Informe a URL e o nome do item que deseja monitorar. A interface tenta "
         "localizar o valor automaticamente, envia avisos por email e registra "
         "estatisticas da execucao."
-    )
-
-    if "monitor_state" not in st.session_state:
-        st.session_state.monitor_state = {
-            "running": False,
-            "thread": None,
-            "stop_event": None,
-            "stats": None,
-            "error": "",
-            "last_message": "",
-        }
-    if "candidate_fields" not in st.session_state:
-        st.session_state.candidate_fields = []
-    if "candidate_error" not in st.session_state:
-        st.session_state.candidate_error = ""
-
-    monitor_state = st.session_state.monitor_state
-    form_defaults = build_default_form_data()
-
-    st.subheader("Descobrir itens da pagina")
-    discovery_col1, discovery_col2 = st.columns([4, 1])
-    with discovery_col1:
-        discovery_url = st.text_input(
-            "URL para analisar",
-            value=form_defaults["source_url"],
-            key="discovery_url",
         )
-    with discovery_col2:
-        discover_clicked = st.button("Analisar")
-
-    if discover_clicked:
-        try:
-            st.session_state.candidate_fields = discover_page_candidates(
-                discovery_url, form_defaults["timeout_seconds"]
-            )
-            st.session_state.candidate_error = ""
-        except Exception as exc:
+        
+        if "monitor_state" not in st.session_state:
+            st.session_state.monitor_state = {
+                "running": False,
+                "thread": None,
+                "stop_event": None,
+                "stats": None,
+                "error": "",
+                "last_message": "",
+            }
+        if "candidate_fields" not in st.session_state:
             st.session_state.candidate_fields = []
-            st.session_state.candidate_error = str(exc)
+        if "candidate_error" not in st.session_state:
+            st.session_state.candidate_error = ""
 
-    if st.session_state.candidate_error:
-        st.error(st.session_state.candidate_error)
+        monitor_state = st.session_state.monitor_state
+        form_defaults = build_default_form_data()
 
-    if st.session_state.candidate_fields:
-        options = {
-            f"{item.label} | valor atual: {item.value}": item
-            for item in st.session_state.candidate_fields
-        }
-        selected_option = st.selectbox(
-            "Itens encontrados na pagina",
-            list(options.keys()),
-            key="candidate_selector",
-        )
-        selected_candidate = options[selected_option]
-        st.caption(selected_candidate.context)
-        st.success(
-            f"Item selecionado para monitoramento: {selected_candidate.label}"
-        )
-    else:
-        selected_candidate = None
-        st.caption(
-            "Clique em Analisar para listar automaticamente os itens "
-            "encontrados com valor numerico."
-        )
-
-    with st.form("auction_form"):
-        form_data = {
-            "user_name": st.text_input(
-                "Seu nome", value=form_defaults["user_name"]
-            ),
-            "source_url": st.text_input(
-                "URL da pagina a monitorar",
-                value=discovery_url or form_defaults["source_url"],
-            ),
-            "selector": st.text_input(
-                "Nome exato da acao, moeda ou item que deseja acompanhar",
-                value=selected_candidate.label
-                if selected_candidate
-                else form_defaults["selector"],
-                help=(
-                    "Exemplo: PETR4, VALE3, Dolar, Euro, Lance atual ou nome do "
-                    "lote. Evite termos genericos como cotacoes."
-                ),
-                disabled=selected_candidate is not None,
-            ),
-            "selector_type": "smart",
-            "interval_seconds": st.number_input(
-                "Verificar a cada quantos segundos",
-                min_value=1.0,
-                value=float(form_defaults["interval_seconds"]),
-            ),
-            "timeout_seconds": st.number_input(
-                "Tempo maximo de espera da pagina (s)",
-                min_value=1.0,
-                max_value=300.0,
-                value=float(form_defaults["timeout_seconds"]),
-            ),
-            "email_sender": st.text_input(
-                "Email que vai enviar os avisos",
-                value=form_defaults["email_sender"],
-            ),
-            "email_recipient": st.text_input(
-                "Email que vai receber os avisos",
-                value=form_defaults["email_recipient"],
-            ),
-            "email_password": form_defaults["email_password"],
-            "smtp_server": st.text_input(
-                "Servidor SMTP", value=form_defaults["smtp_server"]
-            ),
-            "smtp_port": st.number_input(
-                "Porta SMTP",
-                min_value=1,
-                max_value=65535,
-                value=int(form_defaults["smtp_port"]),
-            ),
-            "target_url": "",
-            "target_input_selector": "",
-            "target_button_selector": "",
-        }
-
-        with st.expander("Configuracao avancada"):
-            advanced_type = st.selectbox(
-                "Modo de localizacao",
-                ["smart", "text", "css", "xpath", "regex"],
-                help="Use outro modo apenas se a localizacao automatica nao funcionar.",
+        st.subheader("Descobrir itens da pagina")
+        discovery_col1, discovery_col2 = st.columns([4, 1])
+        with discovery_col1:
+            discovery_url = st.text_input(
+                "URL para analisar",
+                value=form_defaults["source_url"],
+                key="discovery_url",
             )
-            target_url = st.text_input(
-                "URL da pagina publica para interacao (opcional)"
-            )
-            target_input_selector = st.text_input(
-                "Seletor do campo de texto (opcional)"
-            )
-            target_button_selector = st.text_input("Seletor do botao (opcional)")
+        with discovery_col2:
+            discover_clicked = st.button("Analisar")
 
-        form_data["selector_type"] = advanced_type
-        if selected_candidate is not None:
-            form_data["selector"] = selected_candidate.label
-        form_data["target_url"] = target_url
-        form_data["target_input_selector"] = target_input_selector
-        form_data["target_button_selector"] = target_button_selector
-
-        #submitted = st.form_submit_button("Iniciar monitoramento")
-
-        col_test1, col_test2 = st.columns(2)
-        with col_test1:
-            submitted = st.form_submit_button("Iniciar monitoramento")
-        with col_test2:
-            test_email = st.form_submit_button("Testar Conexão de E-mail")
-
-    
-    if test_email:
-        with st.spinner("Testando conexão SMTP e enviando e-mail."):
+        if discover_clicked:
             try:
-                
-                test_email_connection(form_data)
-                st.success("E-mail de teste enviado com sucesso.")
-            except Exception as exc:
-                st.error(f"Falha no envio: {exc}")
-
-    if submitted:
-        if monitor_state["running"]:
-            st.warning("Ja existe um monitoramento em execucao nesta sessao.")
-        else:
-            try:
-                LOGGER.info(
-                    "Usuario %s iniciou monitoramento simplificado da URL %s para %s",
-                    form_data.get("user_name", "").strip() or "desconhecido",
-                    form_data.get("source_url", "").strip(),
-                    form_data.get("selector", "").strip(),
+                st.session_state.candidate_fields = discover_page_candidates(
+                    discovery_url, form_defaults["timeout_seconds"]
                 )
-                _start_background_monitoring(form_data, monitor_state)
-                st.success("Monitoramento iniciado em segundo plano.")
-            except ValidationError as exc:
-                st.error(str(exc))
+                st.session_state.candidate_error = ""
+            except Exception as exc:
+                st.session_state.candidate_fields = []
+                st.session_state.candidate_error = str(exc)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Atualizar estatisticas"):
-            st.rerun()
-    with col2:
-        if st.button("Parar monitoramento", disabled=not monitor_state["running"]):
-            if monitor_state["stop_event"]:
-                monitor_state["stop_event"].set()
-            st.rerun()
+        if st.session_state.candidate_error:
+            st.error(st.session_state.candidate_error)
 
-    if monitor_state["last_message"]:
-        st.info(monitor_state["last_message"])
-    if monitor_state["error"]:
-        st.error(monitor_state["error"])
+        if st.session_state.candidate_fields:
+            options = {
+                f"{item.label} | valor atual: {item.value}": item
+                for item in st.session_state.candidate_fields
+            }
+            selected_option = st.selectbox(
+                "Itens encontrados na pagina",
+                list(options.keys()),
+                key="candidate_selector",
+            )
+            selected_candidate = options[selected_option]
+            st.caption(selected_candidate.context)
+            st.success(
+                f"Item selecionado para monitoramento: {selected_candidate.label}"
+            )
+        else:
+            selected_candidate = None
+            st.caption(
+                "Clique em Analisar para listar automaticamente os itens "
+                "encontrados com valor numerico."
+            )
 
-    stats = monitor_state.get("stats")
-    if stats:
-        st.subheader("Estatisticas")
-        metric_col1, metric_col2, metric_col3 = st.columns(3)
-        metric_col1.metric("Consultas", stats.get("checks_performed", 0))
-        metric_col2.metric("Mudancas", stats.get("changes_detected", 0))
-        metric_col3.metric("Valor atual", stats.get("current_value", "-"))
+        with st.form("auction_form"):
+            form_data = {
+                "user_name": st.text_input(
+                    "Seu nome", value=form_defaults["user_name"]
+                ),
+                "source_url": st.text_input(
+                    "URL da pagina a monitorar",
+                    value=discovery_url or form_defaults["source_url"],
+                ),
+                "selector": st.text_input(
+                    "Nome exato da acao, moeda ou item que deseja acompanhar",
+                    value=selected_candidate.label
+                    if selected_candidate
+                    else form_defaults["selector"],
+                    help=(
+                        "Exemplo: PETR4, VALE3, Dolar, Euro, Lance atual ou nome do "
+                        "lote. Evite termos genericos como cotacoes."
+                    ),
+                    disabled=selected_candidate is not None,
+                ),
+                "selector_type": "smart",
+                "interval_seconds": st.number_input(
+                    "Verificar a cada quantos segundos",
+                    min_value=1.0,
+                    value=float(form_defaults["interval_seconds"]),
+                ),
+                "timeout_seconds": st.number_input(
+                    "Tempo maximo de espera da pagina (s)",
+                    min_value=1.0,
+                    max_value=300.0,
+                    value=float(form_defaults["timeout_seconds"]),
+                ),
+                "email_sender": st.text_input(
+                    "Email que vai enviar os avisos",
+                    value=form_defaults["email_sender"],
+                ),
+                "email_recipient": st.text_input(
+                    "Email que vai receber os avisos",
+                    value=form_defaults["email_recipient"],
+                ),
+                "email_password": form_defaults["email_password"],
+                "smtp_server": st.text_input(
+                    "Servidor SMTP", value=form_defaults["smtp_server"]
+                ),
+                "smtp_port": st.number_input(
+                    "Porta SMTP",
+                    min_value=1,
+                    max_value=65535,
+                    value=int(form_defaults["smtp_port"]),
+                ),
+                "target_url": "",
+                "target_input_selector": "",
+                "target_button_selector": "",
+            }
 
-        st.text_input(
-            "Item monitorado", value=stats.get("monitored_label", ""), disabled=True
-        )
-        st.text_input(
-            "Valor inicial", value=stats.get("initial_value", ""), disabled=True
-        )
-        st.text_input(
-            "Ultima alteracao",
-            value=stats.get("last_change_at", ""),
-            disabled=True,
-        )
-        st.text_area(
-            "Localizacao encontrada",
-            value=stats.get("locator_description", ""),
-            disabled=True,
-            height=120,
-        )
-    else:
-        st.caption(
-            "As estatisticas aparecerao aqui depois que a primeira leitura for concluida."
-        )
+            with st.expander("Configuracao avancada"):
+                advanced_type = st.selectbox(
+                    "Modo de localizacao",
+                    ["smart", "text", "css", "xpath", "regex"],
+                    help="Use outro modo apenas se a localizacao automatica nao funcionar.",
+                )
+                target_url = st.text_input(
+                    "URL da pagina publica para interacao (opcional)"
+                )
+                target_input_selector = st.text_input(
+                    "Seletor do campo de texto (opcional)"
+                )
+                target_button_selector = st.text_input("Seletor do botao (opcional)")
 
+            form_data["selector_type"] = advanced_type
+            if selected_candidate is not None:
+                form_data["selector"] = selected_candidate.label
+            form_data["target_url"] = target_url
+            form_data["target_input_selector"] = target_input_selector
+            form_data["target_button_selector"] = target_button_selector
+
+            submitted = st.form_submit_button("Iniciar monitoramento")
+
+        if submitted:
+            if monitor_state["running"]:
+                st.warning("Ja existe um monitoramento em execucao nesta sessao.")
+            else:
+                try:
+                    LOGGER.info(
+                        "Usuario %s iniciou monitoramento simplificado da URL %s para %s",
+                        form_data.get("user_name", "").strip() or "desconhecido",
+                        form_data.get("source_url", "").strip(),
+                        form_data.get("selector", "").strip(),
+                    )
+                    _start_background_monitoring(form_data, monitor_state)
+                    st.success("Monitoramento iniciado em segundo plano.")
+                except ValidationError as exc:
+                    st.error(str(exc))
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Atualizar estatisticas"):
+                st.rerun()
+        with col2:
+            if st.button("Parar monitoramento", disabled=not monitor_state["running"]):
+                if monitor_state["stop_event"]:
+                    monitor_state["stop_event"].set()
+                st.rerun()
+
+        if monitor_state["last_message"]:
+            st.info(monitor_state["last_message"])
+        if monitor_state["error"]:
+            st.error(monitor_state["error"])
+
+        stats = monitor_state.get("stats")
+        if stats:
+            st.subheader("Estatisticas")
+            metric_col1, metric_col2, metric_col3 = st.columns(3)
+            metric_col1.metric("Consultas", stats.get("checks_performed", 0))
+            metric_col2.metric("Mudancas", stats.get("changes_detected", 0))
+            metric_col3.metric("Valor atual", stats.get("current_value", "-"))
+
+            st.text_input(
+                "Item monitorado", value=stats.get("monitored_label", ""), disabled=True
+            )
+            st.text_input(
+                "Valor inicial", value=stats.get("initial_value", ""), disabled=True
+            )
+            st.text_input(
+                "Ultima alteracao",
+                value=stats.get("last_change_at", ""),
+                disabled=True,
+            )
+            st.text_area(
+                "Localizacao encontrada",
+                value=stats.get("locator_description", ""),
+                disabled=True,
+                height=120,
+            )
+        else:
+            st.caption(
+                "As estatisticas aparecerao aqui depois que a primeira leitura for concluida."
+            )
+    with tab2:
+        st.header("Análise de Complexidade e Algoritmo 🧠")
+        
+        st.write("""
+        Utilizamos uma arquitetura modular que separa a interface, a automação do navegador e o serviço de monitoramento, o que facilita a análise de cada etapa.
+        A eficiência do Assistente de Lances foi planejada para garantir um monitoramento leve e escalável. 
+        Abaixo, detalhamos como o software lida com o processamento de dados.
+        """)
+
+        # Tabela de Complexidade Big O
+        st.subheader("Desempenho (Big O Notation)")
+        
+        # Criando um dicionário para a tabela
+        dados_complexidade = {
+            "Operação": ["Monitoramento (Ciclos)", "Parsing de HTML", "Detecção de Mudanças", "Envio de Notificações"],
+            "Complexidade": ["O(c)", "O(n)", "O(1)", "O(1)"],
+            "Descrição": [
+                "Depende linearmente do número 'c' de verificações agendadas.",
+                "Proporcional ao tamanho 'n' do conteúdo da página processada.",
+                "Comparação direta entre o valor antigo e o novo valor extraído.",
+                "Operação de rede constante por evento disparado."
+            ]
+        }
+        st.table(dados_complexidade)
+
+        st.divider()
+
+        # Explicação Detalhada
+        col_alg1, col_alg2 = st.columns(2)
+        
+        with col_alg1:
+            st.markdown("### 🛠️ Lógica de Extração")
+            st.write("""
+            O algoritmo utiliza seletores dinâmicos (**CSS, XPath e Regex**). 
+            Diferente de uma busca simples em texto, o uso de seletores permite que o algoritmo 
+            vá direto ao nó da árvore DOM, otimizando o tempo de execução para **O(log n)** em 
+            motores de busca de navegadores modernos.
+            """)
+
+        with col_alg2:
+            st.markdown("### ⚡ Estabilidade")
+            st.write("""
+            Para evitar o bloqueio por excesso de requisições ou falhas de rede, 
+            implementamos um sistema de **Timeout** e **Validação de Erros**. 
+            Isso garante que o algoritmo não entre em loop infinito caso o site alvo 
+            fique offline, mantendo a integridade da aplicação.
+            """)
+
+        st.info("""
+        **Nota Técnica:** A escolha do **Playwright** em modo *headless* permite que a complexidade de 
+        renderização de JavaScript seja gerenciada de forma assíncrona, não travando a thread principal da interface.
+        """)
+
+
+    with tab3:
+        st.header("Sobre o Projeto 💻")
+        
+        # Seção de Equipe
+        st.subheader("Equipe de Desenvolvimento")
+        
+        # Criando 5 colunas para os 5 alunos
+        cols = st.columns(5)
+        
+        alunos = [
+            {"nome": "Ana Souza", "id": "2312130055", "github": "https://github.com/AnaSouza-Dev"},
+            {"nome": "Caio Silveira", "id": "2312130166", "github": "https://github.com/Caiorem"},
+            {"nome": "Marco Antônio", "id": "2212130044", "github": "https://github.com/macostacurta"},
+            {"nome": "Clara Fontenele", "id": "2312130230", "github": "https://github.com/CraraMaria"},
+            {"nome": "Victória Thereza", "id": "2312130079", "github": "https://github.com/vicfior"},
+        ]
+
+        for i, aluno in enumerate(alunos):
+            with cols[i]:
+                st.markdown("### 🤓")
+                st.write(f"**{aluno['nome']}**")
+                st.caption(f"{aluno['id']}")  # Matrícula limpa abaixo do nome
+                st.markdown(f"[GitHub]({aluno['github']})")
+                
+        st.divider()
+                
+        st.subheader("Quem somos 🎓") # Descrição do Projeto
+        col_desc, col_icon = st.columns([2, 1])
+        with col_desc:
+            st.write("""
+            Somos uma equipe de estudantes de Ciência da Computação do Instituto de Ensino Superior de Brasília - IESB. Este projeto foi desenvolvido utilizando **Streamlit** com o objetivo de automatizar o monitoramento de lances em leilões, integrando ferramentas de web scraping 
+            e notificações em tempo real.
+            """)
+        
+        with col_icon:
+            # Emoji grande representando a faculdade/ciência
+            st.markdown("<h1 style='text-align: center; font-size: 100px;'>🏫</h1>", unsafe_allow_html=True)
+        
+        st.divider()
+
+        # Seção Sobre Nós e Arquitetura Técnica
+        st.subheader("Sobre o Projeto e Arquitetura")
+        
+        col_desc, col_tech = st.columns([2, 1])
+        
+        with col_desc:
+            st.write("""
+            Este Assistente de Lances é uma aplicação de monitoramento dinâmico desenvolvida em **Python**. 
+            
+            Além de utilizar o **Streamlit** para a interface web, sua inteligência reside em um núcleo modular robusto que utiliza:
+            
+            * **Automação e Web Scraping:** Uso de **Playwright** para renderização de páginas dinâmicas e extração de dados via seletores CSS, XPath e Regex.
+            * **Processamento Assíncrono:** Monitoramento contínuo em background com lógica de detecção de mudanças em tempo real ($O(1)$ para comparação).
+            * **Qualidade de Software:** Cobertura de testes automatizados com **Pytest** e logs detalhados de execução para auditoria.
+            * **Notificações e Integração:** Comunicação via protocolo **SMTP** para alertas imediatos e interação com páginas públicas de interação.
+            * **Documentação:** Estrutura documentada via **MkDocs** para facilitar a manutenção e escalabilidade do código.
+            """)
+            st.markdown("🔗 [Acesse o código-fonte no GitHub](https://github.com/vicfior/Assistente-de-lances)")
+        
+        with col_tech:
+            # Ícone Representativo do IESB / Ciência
+            st.markdown("<h1 style='text-align: center; margin-top: -20px;'>🤖</h1>", unsafe_allow_html=True)
+            st.info("""
+            **Stack Técnica:**
+            - Python 3.x
+            - Playwright
+            - Pytest
+            - MkDocs
+            - Streamlit
+            - SMTP / Logging
+            """)
+
+
+
+        
+    st.divider()
+
+    # Centralizando o rodapé
+    col_f1, col_f2, col_f3 = st.columns([1, 2, 1])
+    
+    with col_f2:
+        st.markdown("<p style='text-align: center; color: gray;'>Projeto desenvolvido para a disciplina de Análise de Algoritmos — IESB 2026</p>", unsafe_allow_html=True)
+        # O link_button precisa do prefixo mailto: para funcionar como e-mail
+        st.link_button("📩 Entre em contato via Gmail", "mailto:monitoramentoapp51@gmail.com", use_container_width=True)
 
 if __name__ == "__main__":
     mode = os.getenv("AUCTION_ASSISTANT_MODE", "cli").lower()
