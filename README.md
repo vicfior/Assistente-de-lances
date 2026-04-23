@@ -37,7 +37,7 @@ Aplicacao em Python para monitorar dinamicamente um campo em uma pagina de leila
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate
+source .venv\Scripts\activate || source .venv\bin\activate
 pip install -r requirements.txt
 playwright install chromium
 ```
